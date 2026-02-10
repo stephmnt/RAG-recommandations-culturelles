@@ -1,34 +1,40 @@
-# POC RAG Puls-Events (Étapes 1 à 3)
+# POC RAG Puls-Events (Etapes 1 a 4)
 
-Ce dépôt couvre :
+Ce depot couvre:
 
-* Étape 1: environnement reproductible (LangChain + Mistral + FAISS CPU)
-* Étape 2: récupération + nettoyage OpenAgenda pour produire un dataset prêt à indexer
-* Étape 3: chunking + embeddings + indexation FAISS persistée
+- Etape 1: environnement reproductible (LangChain + Mistral + FAISS CPU)
+- Etape 2: recuperation + nettoyage OpenAgenda pour produire un dataset pret a indexer
+- Etape 3: chunking + embeddings + indexation FAISS persistante
+- Etape 4: moteur RAG (retrieval + generation Mistral) sans API web
 
-Le scope volontairement exclu pour l'instant :
+Hors scope actuel:
 
-* chaînes RAG LangChain
-* API FastAPI/Flask
-* évaluation RAGAS
+- API FastAPI/Flask (etape 5)
+- dockerisation
+- evaluation RAGAS complete
 
 ## Choix techniques (lead-level)
 
-* Gestion d'environnement: `requirements.txt` avec versions fixes pour une reproduction simple et rapide chez un évaluateur (pas de dépendances implicites).
-* Portabilité: `faiss-cpu` (pas de `faiss-gpu`).
-* Secrets: `.env` local uniquement, jamais versionné.
-* Zone géographique cible: `Département de l'Hérault (34)` (filtre département + coordonnées/rayon autour de Montpellier).
-* Fenêtre temporelle: historique de 365 jours + horizon à venir configurable (par défaut +90 jours).
-* Sortie étape 2: dataset propre `events_processed.parquet` avec `document_text` et `retrieval_metadata` prêts pour l'étape 3.
-* Étape 3:
+- Gestion d'environnement: `requirements.txt` avec versions fixes.
+- Portabilite: `faiss-cpu` (pas de `faiss-gpu`).
+- Secrets: `.env` local uniquement, jamais versionne.
+- Zone geographique cible: `Departement de l'Herault (34)`.
+- Fenetre temporelle: historique glissant 365 jours + horizon a venir configurable.
+- Sortie etape 2: `events_processed.parquet` contenant `document_text` et `retrieval_metadata`.
+- Etape 3:
   - chunking via `RecursiveCharacterTextSplitter`
-  - embeddings par défaut HuggingFace, fallback depuis Mistral vers HuggingFace si indisponible
-  - index FAISS persisté localement + métadonnées de build
+  - embeddings HF par defaut, fallback Mistral -> HF
+  - index FAISS persiste + metadata de build
+- Etape 4:
+  - retrieval top-k dedup par `event_id`
+  - contexte structure et borne en taille
+  - prompting FR anti-hallucination
+  - sortie JSON-serialisable avec sources et latences
 
-## Prérequis
+## Prerequis
 
-* Python 3.10 ou 3.11 recommandé (minimum 3.8)
-* `pip` récent
+- Python 3.10 ou 3.11 recommande (minimum 3.8)
+- `pip` recent
 
 ## Installation
 
@@ -39,96 +45,65 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Important :
+Important:
 
-* Python 3.13 n'est pas supporté par ce lock de dépendances (notamment `pyarrow==17.0.0`).
-* Utiliser Python 3.10 ou 3.11 pour une installation reproductible.
+- Python 3.13 n'est pas supporte par ce lock (notamment `pyarrow==17.0.0`).
+- Utiliser Python 3.10/3.11 pour une installation stable.
 
 ## Configuration des secrets
 
-1. Copier l'exemple `cp .env.example .env`
-2. Renseigner `OPENAGENDA_API_KEY` dans `.env`.
-3. Ne jamais commiter `.env` (déjà ignoré via `.gitignore`).
+1. Copier l'exemple:
 
-## Smoke test
+```bash
+cp .env.example .env
+```
 
-Vérifier que les imports critiques et versions sont corrects:
+2. Renseigner les cles dans `.env`:
+
+- `OPENAGENDA_API_KEY` (etapes 2)
+- `MISTRAL_API_KEY` (etape 4)
+
+3. Ne jamais commiter `.env` (deja ignore dans `.gitignore`).
+
+## Smoke test environnement (Etape 1)
 
 ```bash
 python3 scripts/check_env.py
 ```
 
-Le script :
+Le script:
 
-* affiche les versions de Python, langchain, faiss, mistral/mistralai, pandas, requests
-* teste ces imports:
+- affiche les versions de Python, langchain, faiss, mistralai, pandas, requests
+- verifie les imports critiques
+- retourne un code non-zero si un import echoue
 
-  * `import faiss`
-  * `from langchain.vectorstores import FAISS`
-  * `from langchain.embeddings import HuggingFaceEmbeddings`
-  * `from mistral import MistralClient`
-* retourne un code non-zero si un import échoue
+## Recuperer les donnees OpenAgenda (Etape 2)
 
-## Récupérer les données OpenAgenda
+La configuration est centralisee dans `config.yaml`:
 
-La configuration est centralisée dans `config.yaml` :
+- zone (departement 34 + ville pivot)
+- periode (`start_date`, `end_date`)
+- pagination (`page_size`, `max_pages`, `max_events`)
+- langue (`fr`)
 
-* zone (département 34, ville pivot Montpellier, coordonnées, rayon)
-* période (`start_date` et `end_date`)
-* pagination (`page_size`, `max_pages`, `max_events`)
-* langue (`fr`)
+Si les dates sont vides, `scripts/build_dataset.py` applique:
 
-Si `start_date`/`end_date` sont vides, `scripts/build_dataset.py` applique :
+- `start_date = aujourd'hui - 365 jours`
+- `end_date = aujourd'hui + 90 jours`
 
-* `start_date = date_du_jour - 365 jours`
-* `end_date = date_du_jour + 90 jours`
-
-## Construire le dataset
+### Construire le dataset
 
 ```bash
 python3 scripts/build_dataset.py --config config.yaml
 ```
 
-Sorties produites :
+Sorties:
 
-* `data/raw/events_raw.jsonl`
-* `data/processed/events_processed.parquet`
-* `logs/build_dataset.log`
+- `data/raw/events_raw.jsonl`
+- `data/processed/events_processed.parquet`
+- `logs/build_dataset.log`
 
-Le script affiche un résumé :
-
-* nombre d'événements récupérés
-* nombre après filtres temporels
-* nombre de doublons supprimés
-* nombre d'enregistrements invalides
-* nombre final exporté
-
-## Où sont les fichiers générés ?
-
-* Bruts: `data/raw/`
-* Nettoyés: `data/processed/`
-* Logs: `logs/`
-* Exemple versionné: `data/sample/events_sample.jsonl`
-
-`data/` local est ignoré par git, sauf `data/sample/`.
-
-## Lancer les tests
-
-```bash
-pytest -q
-```
-
-Les tests sont relançables et 100% offline (HTTP mocké).
-
-Pour inclure le smoke de performance Étape 3:
-
-```bash
-pytest -q -m slow
-```
-
-## Construire l'index FAISS
-
-Build/rebuild complet depuis le dataset processed:
+## Construire l'index FAISS (Etape 3)
 
 ```bash
 python3 scripts/build_index.py \
@@ -136,95 +111,146 @@ python3 scripts/build_index.py \
   --output artifacts/faiss_index
 ```
 
-Par défaut le script lit aussi `configs/indexing.yaml`:
+Configuration par defaut dans `configs/indexing.yaml`:
+
 - chunking (`chunk_size`, `chunk_overlap`, `min_chunk_size`, `separators`)
 - embeddings (`provider`, `huggingface_model`, `mistral_model`)
 - FAISS (`normalize_L2`)
 
-## Tester une recherche locale
+### Tester une recherche locale sur l'index
 
 ```bash
 python3 scripts/query_index.py --query "concert jazz montpellier ce week-end" --k 5
 ```
 
-Affichage:
-- score
-- `event_id`
-- `start_datetime`
-- `city`
-- `url`
-- extrait du chunk
+## Moteur RAG (Etape 4)
 
-## Où sont stockés les artifacts ?
+Le moteur RAG est dans `src/rag/` et suit un flux single-turn:
 
-- Sortie index: `artifacts/faiss_index/`
-- Fichiers FAISS:
-  - `index.faiss`
-  - `index.pkl`
-  - `index_metadata.json`
+1. chargement de l'index FAISS local,
+2. retrieval top-k + deduplication par evenement,
+3. construction d'un contexte borne,
+4. generation via Mistral,
+5. retour structure: reponse + sources + meta (latences, model, prompt).
 
-Les gros binaires sont ignorés par git, la structure et les README restent versionnés.
+### Configurer Mistral
 
-## Rebuild de l'index (déterminisme et paramètres)
+```bash
+export MISTRAL_API_KEY="votre_cle"
+# Optionnel
+export MISTRAL_MODEL="mistral-small-latest"
+```
+
+(ou renseigner ces variables dans `.env`).
+
+### Executer une question en local
+
+```bash
+python scripts/ask_local.py --query "Quels evenements jazz a Montpellier cette semaine ?" --debug
+```
+
+Options utiles:
+
+- `--top_k 6`
+- `--index_path artifacts/faiss_index`
+- `--prompt_version v1`
+
+### Comprendre les sources
+
+Chaque source retournee contient:
+
+- `event_id`, `title`, `start_datetime`, `end_datetime`
+- `city`, `location_name`, `url`
+- `score` (si disponible)
+- `snippet` (extrait court du chunk)
+
+Le service limite les sources dedupliquees a `max_sources` (defaut 5).
+
+### Evaluation smoke (sans RAGAS)
+
+Jeu d'evaluation synthétique versionne:
+
+- `data/eval/smoke_eval.jsonl`
+
+Lancer l'evaluation:
+
+```bash
+python scripts/evaluate_smoke.py --offline
+```
+
+Sortie:
+
+- rapport JSON: `reports/smoke_eval_report.json`
+- resume console: taux URL attendues, overlap de mots-cles
+
+## Ou sont stockes les artifacts ?
+
+- Index FAISS: `artifacts/faiss_index/`
+- Metadata de build index: `artifacts/faiss_index/index_metadata.json`
+- Logs: `logs/`
+- Rapport smoke: `reports/smoke_eval_report.json`
+
+Les gros binaires et sorties runtime sont ignores par git.
+
+## Rebuild de l'index (determinisme et parametres)
 
 Le rebuild est reproductible via:
-- dataset d'entrée explicite
+
+- dataset d'entree explicite
 - config explicite (`configs/indexing.yaml`)
-- hash de dataset (`dataset_hash`) stocké dans `index_metadata.json`
-- résumé des paramètres chunking/embeddings/FAISS dans `index_metadata.json`
+- hash dataset (`dataset_hash`) dans `index_metadata.json`
+- resume des parametres chunking/embeddings/FAISS
 
-## Compatibilité LangChain (imports robustes)
+## Compatibilite LangChain
 
-Le code gère les variations selon version:
-- `langchain_community.vectorstores.FAISS` puis fallback `langchain.vectorstores.FAISS`
-- embeddings HF/Mistral avec fallback en cas d'indisponibilité
+Imports robustes selon versions:
 
-## Dépannage Étape 3
+- vectorstore: `langchain_community.vectorstores.FAISS` puis fallback `langchain.vectorstores.FAISS`
+- embeddings HF/Mistral: fallback gere dans la factory
 
-- `ImportError` sur FAISS / LangChain:
-  - vérifier `pip install -r requirements.txt`
-  - vérifier version Python 3.10/3.11
-- `EMBEDDING_PROVIDER=mistral` sans clé:
-  - fallback automatique vers HuggingFace avec warning log
-- modèle HF indisponible:
-  - définir `EMBEDDING_MODEL` ou `embeddings.huggingface_model` dans `configs/indexing.yaml`
-- erreur de load FAISS:
-  - reconstruire l'index (`scripts/build_index.py`) puis relancer la requête
+## Lancer les tests
 
-## Notebook de validation (Étapes 1-2)
+Tests unitaires rapides (offline):
 
-Notebook simple et pédagogique :
+```bash
+pytest -q
+```
 
-* `notebooks/validation_etapes_1_2.ipynb`
+Inclure les tests lents performance:
 
-Il vérifie :
+```bash
+pytest -q -m slow
+```
 
-* smoke test environnement (versions + imports critiques)
-* configuration OpenAgenda
-* pagination client en mode mock (sans réseau)
-* cleaning + validation schéma
-* simulation écriture raw/processed
-* exécution optionnelle de `scripts/check_env.py` et `pytest -q`
+## Depannage
 
-## Dépannage
+### Etapes 1-2
 
-* Clé API absente:
+- Cle OpenAgenda absente ou invalide (`401/403`): verifier `.env` + quotas.
+- Timeouts OpenAgenda: augmenter `request.timeout_seconds`, reduire `page_size`.
+- Pagination insuffisante: augmenter `max_pages`/`max_events`.
 
-  * symptôme: erreur 401/403
-  * action: vérifier `.env` et `OPENAGENDA_API_KEY`
-* 401/403:
+### Etape 3
 
-  * vérifier validité de la clé et quotas OpenAgenda
-* Timeouts:
+- Import FAISS/LangChain en echec: verifier versions Python/dependances.
+- Provider `mistral` sans cle: fallback auto HF avec warning.
+- Index introuvable: rebuild via `scripts/build_index.py`.
 
-  * augmenter `request.timeout_seconds` dans `config.yaml`
-  * réduire `pagination.page_size`
-* Pagination incomplète:
+### Etape 4
 
-  * augmenter `pagination.max_pages` ou `pagination.max_events`
-  * vérifier les paramètres `department` et `city`/filtres géographiques
+- `MISTRAL_API_KEY` manquante: generation impossible (retrieval local reste disponible).
+- Quota/API Mistral: utiliser `scripts/evaluate_smoke.py --offline` pour test sans reseau.
+- Reponse sans sources: la question est trop large ou le dataset/index est incomplet.
 
-## Structure du dépôt (Étapes 1-3)
+## Notebook de validation
+
+Notebook pedagogique:
+
+- `notebooks/validation_etapes_1_2.ipynb`
+
+Il couvre les validations et demonstrations des etapes 1 a 3.
+
+## Structure du depot (Etapes 1-4)
 
 ```text
 .
@@ -240,18 +266,24 @@ Il vérifie :
 │   └── faiss_index/
 │       └── README.md
 ├── data/
+│   ├── eval/
+│   │   └── smoke_eval.jsonl
 │   └── sample/
 │       └── events_sample.jsonl
 ├── logs/
+│   └── .gitkeep
+├── reports/
 │   └── .gitkeep
 ├── mistral/
 │   └── __init__.py
 ├── notebooks/
 │   └── validation_etapes_1_2.ipynb
 ├── scripts/
+│   ├── ask_local.py
 │   ├── build_dataset.py
 │   ├── build_index.py
 │   ├── check_env.py
+│   ├── evaluate_smoke.py
 │   └── query_index.py
 ├── src/
 │   ├── __init__.py
@@ -264,22 +296,33 @@ Il vérifie :
 │   ├── openagenda/
 │   │   ├── __init__.py
 │   │   └── client.py
-│   └── preprocess/
+│   ├── preprocess/
+│   │   ├── __init__.py
+│   │   ├── cleaning.py
+│   │   └── schema.py
+│   └── rag/
 │       ├── __init__.py
-│       ├── cleaning.py
-│       └── schema.py
+│       ├── context.py
+│       ├── llm.py
+│       ├── prompts.py
+│       ├── retriever.py
+│       ├── service.py
+│       └── types.py
 └── tests/
     ├── conftest.py
     ├── test_cleaning.py
     ├── test_client.py
     ├── test_indexing_chunking.py
     ├── test_indexing_pipeline.py
+    ├── test_rag_prompting.py
+    ├── test_rag_retrieval.py
+    ├── test_rag_service.py
     └── test_schema.py
 ```
 
-## Reproductibilité
+## Reproductibilite
 
-* Dépendances figées dans `requirements.txt`.
-* Aucun secret versionné.
-* Aucun fichier généré versionné (hors échantillon `data/sample/`).
-* Pipeline paramétrable via `config.yaml` + variables d'environnement.
+- Dependances figees dans `requirements.txt`.
+- Aucun secret versionne.
+- Sorties runtime ignorees (`data/`, `artifacts/faiss_index/`, `reports/`, `logs/`).
+- Pipelines parametrables via `config.yaml`, `configs/indexing.yaml` et variables d'environnement.

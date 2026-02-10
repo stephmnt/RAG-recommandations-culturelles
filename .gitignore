@@ -30,6 +30,10 @@ logs/*
 !logs/.gitkeep
 *.log
 
+# Evaluation reports
+reports/*
+!reports/.gitkeep
+
 # FAISS artifacts (keep structure docs, ignore heavy binaries)
 artifacts/faiss_index/*
 !artifacts/faiss_index/README.md
@@ -38,6 +42,8 @@ artifacts/faiss_index/*
 data/*
 !data/sample/
 !data/sample/events_sample.jsonl
+!data/eval/
+!data/eval/smoke_eval.jsonl
 
 # IDE / OS noise
 .DS_Store
