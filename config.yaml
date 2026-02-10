@@ -4,10 +4,11 @@ openagenda:
     api_key: ""
     api_key_param: "key"
   location:
-    city: "Lyon"
-    latitude: 45.764
-    longitude: 4.8357
-    radius_km: 20
+    department: "34"
+    city: "Montpellier"
+    latitude: 43.6119
+    longitude: 3.8772
+    radius_km: 55
   time_window:
     start_date: ""
     end_date: ""

@@ -33,10 +33,11 @@ class OpenAgendaConfig:
     base_url: str = "https://api.openagenda.com/v2/events"
     api_key: str = ""
     api_key_param: str = "key"
-    city: str = "Lyon"
-    latitude: float | None = 45.764
-    longitude: float | None = 4.8357
-    radius_km: int | None = 20
+    department: str = ""
+    city: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+    radius_km: int | None = None
     start_date: str = ""
     end_date: str = ""
     language: str = "fr"
@@ -59,15 +60,18 @@ class OpenAgendaConfig:
         extra_params = config.get("filters", {})
         if not isinstance(extra_params, dict):
             extra_params = {}
+        radius_raw = location.get("radius_km")
+        radius_km = _to_int(radius_raw, 20) if radius_raw not in (None, "") else None
 
         return cls(
             base_url=str(config.get("base_url", cls.base_url)),
             api_key=(auth.get("api_key") or config.get("api_key") or "").strip(),
             api_key_param=str(auth.get("api_key_param", "key")).strip() or "key",
-            city=str(location.get("city", "Lyon")).strip(),
+            department=str(location.get("department", "")).strip(),
+            city=str(location.get("city", "")).strip(),
             latitude=_to_float(location.get("latitude")),
             longitude=_to_float(location.get("longitude")),
-            radius_km=_to_int(location.get("radius_km"), 20),
+            radius_km=radius_km,
             start_date=str(time_window.get("start_date", "")).strip(),
             end_date=str(time_window.get("end_date", "")).strip(),
             language=str(request_config.get("language", "fr")).strip() or "fr",
@@ -90,6 +94,8 @@ def build_query_params(config: OpenAgendaConfig, offset: int) -> dict[str, Any]:
 
     if config.api_key:
         params[config.api_key_param] = config.api_key
+    if config.department:
+        params["department"] = config.department
     if config.city:
         params["city"] = config.city
     if config.latitude is not None:
