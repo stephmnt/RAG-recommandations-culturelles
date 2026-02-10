@@ -30,6 +30,10 @@ logs/*
 !logs/.gitkeep
 *.log
 
+# FAISS artifacts (keep structure docs, ignore heavy binaries)
+artifacts/faiss_index/*
+!artifacts/faiss_index/README.md
+
 # Data generated locally
 data/*
 !data/sample/
