@@ -1,13 +1,13 @@
-# POC RAG Puls-Events (Étapes 1 et 2)
+# POC RAG Puls-Events (Étapes 1 à 3)
 
-Ce dépôt couvre uniquement :
+Ce dépôt couvre :
 
 * Étape 1: environnement reproductible (LangChain + Mistral + FAISS CPU)
 * Étape 2: récupération + nettoyage OpenAgenda pour produire un dataset prêt à indexer
+* Étape 3: chunking + embeddings + indexation FAISS persistée
 
 Le scope volontairement exclu pour l'instant :
 
-* index FAISS final
 * chaînes RAG LangChain
 * API FastAPI/Flask
 * évaluation RAGAS
@@ -20,6 +20,10 @@ Le scope volontairement exclu pour l'instant :
 * Zone géographique cible: `Département de l'Hérault (34)` (filtre département + coordonnées/rayon autour de Montpellier).
 * Fenêtre temporelle: historique de 365 jours + horizon à venir configurable (par défaut +90 jours).
 * Sortie étape 2: dataset propre `events_processed.parquet` avec `document_text` et `retrieval_metadata` prêts pour l'étape 3.
+* Étape 3:
+  - chunking via `RecursiveCharacterTextSplitter`
+  - embeddings par défaut HuggingFace, fallback depuis Mistral vers HuggingFace si indisponible
+  - index FAISS persisté localement + métadonnées de build
 
 ## Prérequis
 
@@ -116,6 +120,77 @@ pytest -q
 
 Les tests sont relançables et 100% offline (HTTP mocké).
 
+Pour inclure le smoke de performance Étape 3:
+
+```bash
+pytest -q -m slow
+```
+
+## Construire l'index FAISS
+
+Build/rebuild complet depuis le dataset processed:
+
+```bash
+python3 scripts/build_index.py \
+  --input data/processed/events_processed.parquet \
+  --output artifacts/faiss_index
+```
+
+Par défaut le script lit aussi `configs/indexing.yaml`:
+- chunking (`chunk_size`, `chunk_overlap`, `min_chunk_size`, `separators`)
+- embeddings (`provider`, `huggingface_model`, `mistral_model`)
+- FAISS (`normalize_L2`)
+
+## Tester une recherche locale
+
+```bash
+python3 scripts/query_index.py --query "concert jazz montpellier ce week-end" --k 5
+```
+
+Affichage:
+- score
+- `event_id`
+- `start_datetime`
+- `city`
+- `url`
+- extrait du chunk
+
+## Où sont stockés les artifacts ?
+
+- Sortie index: `artifacts/faiss_index/`
+- Fichiers FAISS:
+  - `index.faiss`
+  - `index.pkl`
+  - `index_metadata.json`
+
+Les gros binaires sont ignorés par git, la structure et les README restent versionnés.
+
+## Rebuild de l'index (déterminisme et paramètres)
+
+Le rebuild est reproductible via:
+- dataset d'entrée explicite
+- config explicite (`configs/indexing.yaml`)
+- hash de dataset (`dataset_hash`) stocké dans `index_metadata.json`
+- résumé des paramètres chunking/embeddings/FAISS dans `index_metadata.json`
+
+## Compatibilité LangChain (imports robustes)
+
+Le code gère les variations selon version:
+- `langchain_community.vectorstores.FAISS` puis fallback `langchain.vectorstores.FAISS`
+- embeddings HF/Mistral avec fallback en cas d'indisponibilité
+
+## Dépannage Étape 3
+
+- `ImportError` sur FAISS / LangChain:
+  - vérifier `pip install -r requirements.txt`
+  - vérifier version Python 3.10/3.11
+- `EMBEDDING_PROVIDER=mistral` sans clé:
+  - fallback automatique vers HuggingFace avec warning log
+- modèle HF indisponible:
+  - définir `EMBEDDING_MODEL` ou `embeddings.huggingface_model` dans `configs/indexing.yaml`
+- erreur de load FAISS:
+  - reconstruire l'index (`scripts/build_index.py`) puis relancer la requête
+
 ## Notebook de validation (Étapes 1-2)
 
 Notebook simple et pédagogique :
@@ -149,7 +224,7 @@ Il vérifie :
   * augmenter `pagination.max_pages` ou `pagination.max_events`
   * vérifier les paramètres `department` et `city`/filtres géographiques
 
-## Structure du dépôt (Étapes 1-2)
+## Structure du dépôt (Étapes 1-3)
 
 ```text
 .
@@ -157,7 +232,13 @@ Il vérifie :
 ├── .gitignore
 ├── README.md
 ├── config.yaml
+├── configs/
+│   └── indexing.yaml
 ├── requirements.txt
+├── artifacts/
+│   ├── README.md
+│   └── faiss_index/
+│       └── README.md
 ├── data/
 │   └── sample/
 │       └── events_sample.jsonl
@@ -169,9 +250,17 @@ Il vérifie :
 │   └── validation_etapes_1_2.ipynb
 ├── scripts/
 │   ├── build_dataset.py
-│   └── check_env.py
+│   ├── build_index.py
+│   ├── check_env.py
+│   └── query_index.py
 ├── src/
 │   ├── __init__.py
+│   ├── indexing/
+│   │   ├── __init__.py
+│   │   ├── build_index.py
+│   │   ├── chunking.py
+│   │   ├── embeddings.py
+│   │   └── search.py
 │   ├── openagenda/
 │   │   ├── __init__.py
 │   │   └── client.py
@@ -183,6 +272,8 @@ Il vérifie :
     ├── conftest.py
     ├── test_cleaning.py
     ├── test_client.py
+    ├── test_indexing_chunking.py
+    ├── test_indexing_pipeline.py
     └── test_schema.py
 ```
 
