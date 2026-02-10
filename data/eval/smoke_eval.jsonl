@@ -1,0 +1,3 @@
+{"question":"Quels concerts jazz a Montpellier cette semaine ?","expected_urls":["https://example.org/evt-jazz"],"expected_keywords":["jazz","montpellier","concert","semaine"]}
+{"question":"As-tu une piece de theatre dans l'Herault ?","expected_urls":["https://example.org/evt-theatre"],"expected_keywords":["theatre","herault","piece"]}
+{"question":"Je cherche une exposition photo a Beziers","expected_urls":["https://example.org/evt-photo"],"expected_keywords":["photo","beziers","exposition"]}
