@@ -1,0 +1,11 @@
+faiss-cpu==1.13.2
+langchain==0.0.353
+mistralai==0.4.2
+sentence-transformers==2.7.0
+pandas==2.2.2
+pyarrow==17.0.0
+requests==2.32.3
+PyYAML==6.0.2
+python-dotenv==1.0.1
+pytest==8.3.3
+requests-mock==1.12.1

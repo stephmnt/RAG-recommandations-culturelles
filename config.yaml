@@ -1,0 +1,23 @@
+openagenda:
+  base_url: "https://api.openagenda.com/v2/events"
+  auth:
+    api_key: ""
+    api_key_param: "key"
+  location:
+    city: "Lyon"
+    latitude: 45.764
+    longitude: 4.8357
+    radius_km: 20
+  time_window:
+    start_date: ""
+    end_date: ""
+  request:
+    language: "fr"
+    timeout_seconds: 20
+    retry_attempts: 3
+    backoff_seconds: 1.0
+  pagination:
+    page_size: 100
+    max_pages: 20
+    max_events: 1000
+  filters: {}
