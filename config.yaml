@@ -1,8 +1,19 @@
 openagenda:
-  base_url: "https://api.openagenda.com/v2/events"
+  base_url: "https://api.openagenda.com/v2"
   auth:
     api_key: ""
     api_key_param: "key"
+    send_api_key_in_query: false
+  agenda_uids: []
+  agenda_search:
+    queries:
+      - "Montpellier"
+      - "Herault"
+      - "34"
+    max_agendas: 25
+    page_size: 50
+    max_pages: 5
+    extra_params: {}
   location:
     department: "34"
     city: "Montpellier"
@@ -21,4 +32,5 @@ openagenda:
     page_size: 100
     max_pages: 20
     max_events: 1000
+  allow_legacy_events_fallback: false
   filters: {}

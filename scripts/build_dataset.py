@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.openagenda.client import OpenAgendaConfig, fetch_events
+from src.openagenda.client import OpenAgendaConfig, fetch_events_with_stats
 from src.preprocess.cleaning import clean_events
 from src.preprocess.schema import EVENT_RECORD_FIELDS
 
@@ -122,11 +122,15 @@ def write_parquet(output_path: Path, records: list[dict[str, Any]]) -> None:
 
 def print_summary(summary: dict[str, Any]) -> None:
     print("\n=== Build summary ===")
+    print(f"Agendas found            : {summary['agendas_found']}")
+    print(f"Agendas scanned          : {summary['agendas_scanned']}")
+    print(f"Legacy fallback used     : {summary['legacy_fallback_used']}")
     print(f"Raw events fetched        : {summary['raw_events']}")
     print(f"After period filtering    : {summary['after_period_filter']}")
     print(f"Duplicates removed        : {summary['duplicates_removed']}")
     print(f"Invalid records dropped   : {summary['invalid_records']}")
     print(f"Final processed records   : {summary['processed_events']}")
+    print(f"Events by agenda          : {summary['events_by_agenda']}")
     print(f"Raw output                : {summary['raw_output']}")
     print(f"Processed output          : {summary['processed_output']}")
     print(f"Log file                  : {summary['log_file']}")
@@ -152,8 +156,21 @@ def main() -> int:
         oa_config.start_date = start_date
         oa_config.end_date = end_date
 
-        logger.info("Fetching events from OpenAgenda")
-        raw_events = fetch_events(oa_config)
+        if not oa_config.api_key:
+            logger.warning(
+                "OPENAGENDA_API_KEY is missing. Requests are likely to fail with HTTP 401/403."
+            )
+
+        logger.info("Fetching events from OpenAgenda (multi-agendas flow)")
+        raw_events, ingestion_stats = fetch_events_with_stats(oa_config)
+        logger.info(
+            "OpenAgenda stats agendas_found=%s agendas_scanned=%s total_events=%s legacy_fallback=%s",
+            ingestion_stats.get("agendas_found", 0),
+            ingestion_stats.get("agendas_scanned", 0),
+            ingestion_stats.get("total_events", 0),
+            ingestion_stats.get("legacy_fallback_used", False),
+        )
+        logger.info("OpenAgenda events_by_agenda=%s", ingestion_stats.get("events_by_agenda", {}))
         write_jsonl(raw_output, raw_events)
         logger.info("Raw events written to %s", raw_output)
 
@@ -169,11 +186,15 @@ def main() -> int:
         logger.info("Processed events written to %s", processed_output)
 
         summary = {
+            "agendas_found": ingestion_stats.get("agendas_found", 0),
+            "agendas_scanned": ingestion_stats.get("agendas_scanned", 0),
+            "legacy_fallback_used": ingestion_stats.get("legacy_fallback_used", False),
             "raw_events": len(raw_events),
             "after_period_filter": stats["after_period_filter"],
             "duplicates_removed": stats["duplicates_removed"],
             "invalid_records": stats["invalid_records"],
             "processed_events": stats["processed_events"],
+            "events_by_agenda": ingestion_stats.get("events_by_agenda", {}),
             "raw_output": str(raw_output),
             "processed_output": str(processed_output),
             "log_file": str(log_path),
