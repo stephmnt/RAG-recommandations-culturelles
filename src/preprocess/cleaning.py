@@ -26,6 +26,24 @@ def _clean_text(value: Any) -> str:
     return str(value).strip()
 
 
+def _normalize_url(value: Any, language: str = "fr") -> str:
+    if value in (None, "", {}, []):
+        return ""
+    if isinstance(value, dict):
+        candidate = _pick_localized_text(value, language=language)
+        text = candidate.strip()
+    else:
+        text = str(value).strip()
+
+    if text in {"{}", "[]", "None", "null", "#"}:
+        return ""
+
+    # Keep only URL-like values; avoid persisting dict string dumps as URLs.
+    if "://" in text or text.startswith("/"):
+        return text
+    return ""
+
+
 def _pick_localized_text(value: Any, language: str = "fr") -> str:
     if value is None:
         return ""
@@ -256,10 +274,11 @@ def select_and_normalize_fields(
     city, location_name, address, latitude, longitude = _normalize_location(
         raw_event, language=language
     )
-    url = _clean_text(
+    url = _normalize_url(
         raw_event.get("canonicalUrl")
         or raw_event.get("url")
-        or raw_event.get("link")
+        or raw_event.get("link"),
+        language=language,
     )
     tags = _normalize_tags(raw_event.get("tags"), language)
 

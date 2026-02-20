@@ -14,6 +14,7 @@ from src.api.config import APISettings
 from src.api.deps import AppDependencies, init_dependencies
 from src.api.errors import register_error_handlers
 from src.api.routes import api_bp
+from src.api.web import web_bp
 
 
 def _configure_logging(level_name: str) -> logging.Logger:
@@ -48,6 +49,7 @@ def create_app(
 
     register_error_handlers(app)
     init_dependencies(app, deps_override=deps_override)
+    app.register_blueprint(web_bp)
     app.register_blueprint(api_bp)
 
     @app.before_request

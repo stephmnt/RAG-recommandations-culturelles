@@ -137,6 +137,36 @@ python3 scripts/evaluate_smoke.py --offline
 python3 scripts/run_api.py
 ```
 
+### Interface graphique locale (sans changer les URLs API)
+
+Une interface web HTML5UP est exposee en plus de l'API:
+
+- `GET /` ou `GET /app`: page web interactive
+- endpoints API conserves tels quels: `/ask`, `/rebuild`, `/health`, `/metadata`
+
+Le formulaire de la page appelle directement `POST /ask` via JavaScript (`fetch`), donc vos requetes URL/API existantes restent compatibles.
+
+### Lancement automatise de bout en bout
+
+Pour preparer puis demarrer l'app en une commande (avec duree de chaque etape):
+
+```bash
+python3 scripts/bootstrap_app.py
+```
+
+Options utiles:
+
+```bash
+# Ne fait pas d'appel OpenAgenda (utilise dataset deja present)
+python3 scripts/bootstrap_app.py --offline
+
+# Prepare seulement (sans demarrer l'API)
+python3 scripts/bootstrap_app.py --prepare-only
+
+# Demarre l'API, fait un smoke test, puis s'arrete
+python3 scripts/bootstrap_app.py --exit-after-smoke
+```
+
 Options utiles:
 
 ```bash

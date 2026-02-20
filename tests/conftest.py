@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -30,9 +31,28 @@ class _MockResponse:
         return self._json_payload
 
 
+@dataclass
+class _RequestRecord:
+    url: str
+    qs: dict[str, list[str]]
+
+
+def _normalize_qs(params: dict[str, Any] | None) -> dict[str, list[str]]:
+    if not params:
+        return {}
+    normalized: dict[str, list[str]] = {}
+    for key, value in params.items():
+        if isinstance(value, (list, tuple)):
+            normalized[str(key)] = [str(item) for item in value]
+        else:
+            normalized[str(key)] = [str(value)]
+    return normalized
+
+
 class _RequestsMockFallback:
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         self.call_count = 0
+        self.request_history: list[_RequestRecord] = []
         self._routes: dict[str, deque[dict[str, Any]]] = {}
 
         def _session_get(
@@ -60,12 +80,18 @@ class _RequestsMockFallback:
         timeout: int | float | None = None,
         **kwargs: Any,
     ) -> _MockResponse:
-        del params, timeout, kwargs
+        del timeout, kwargs
         route = self._routes.get(url)
         if not route:
             raise AssertionError(f"Unexpected request URL in test: {url}")
         payload = route.popleft()
         self.call_count += 1
+        self.request_history.append(
+            _RequestRecord(
+                url=url,
+                qs=_normalize_qs(params),
+            )
+        )
         return _MockResponse(payload)
 
 

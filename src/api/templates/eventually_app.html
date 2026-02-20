@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <title>Puls-Events | Assistant RAG</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="/assets/css/main.css" />
+    <style>
+      html,
+      body {
+        height: auto !important;
+        min-height: 100%;
+        overflow-y: auto !important;
+      }
+
+      body {
+        min-height: 100vh;
+        justify-content: flex-start !important;
+        overscroll-behavior-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      #signup-form {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 0.85em;
+        margin-top: 1.1em;
+      }
+
+      #signup-form input[type="text"] {
+        min-width: 24em;
+      }
+
+      #signup-form input[type="number"] {
+        min-width: 8em;
+      }
+
+      #query-help {
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 0.9em;
+        line-height: 1.5;
+        margin-top: 0.8em;
+        max-width: 64rem;
+      }
+
+      #query-help code {
+        background: rgba(0, 0, 0, 0.28);
+        border-radius: 4px;
+        padding: 0.08em 0.32em;
+      }
+
+      #ask-output {
+        margin-top: 1.4em;
+        max-width: 64rem;
+      }
+
+      #ask-output pre {
+        background: rgba(12, 12, 12, 0.48);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        line-height: 1.5;
+        margin-bottom: 0.9em;
+        overflow-x: auto;
+        padding: 0.8em 1em;
+        white-space: pre-wrap;
+      }
+
+      .sources-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .sources-list li {
+        background: rgba(10, 10, 10, 0.44);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 6px;
+        margin-bottom: 0.8em;
+        padding: 0.8em;
+      }
+
+      .source-meta {
+        color: rgba(255, 255, 255, 0.7);
+        display: block;
+        font-size: 0.88em;
+        margin-top: 0.3em;
+      }
+
+      .status-line {
+        color: rgba(255, 255, 255, 0.88);
+        font-size: 0.94em;
+        margin: 0.55em 0 0.2em;
+      }
+
+      #footer {
+        position: static;
+        left: auto;
+        bottom: auto;
+        margin-top: 1.8em;
+      }
+
+      @media screen and (max-width: 736px) {
+        #signup-form input[type="text"],
+        #signup-form input[type="number"] {
+          min-width: 100%;
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body class="is-preload">
+    <header id="header">
+      <h1>Puls-Events</h1>
+      <p>
+        Assistant de recommandation culturelle pour l'Hérault.<br />
+        Posez une question et obtenez une réponse justifiée par des sources.
+      </p>
+    </header>
+
+    <form id="signup-form" method="post" action="#">
+      <input
+        type="text"
+        name="question"
+        id="question"
+        placeholder="Ex: Quels evenements culturels recommandes-tu a Montpellier dans les 30 prochains jours ?"
+        value="Quels evenements culturels recommandes-tu a Montpellier dans les 30 prochains jours ?"
+        required
+      />
+      <label for="top_k" style="display:flex; flex-direction:column; gap:0.2em;">
+        <span style="font-size:0.85em;">top_k (nb de sources explorees)</span>
+        <input type="number" name="top_k" id="top_k" min="1" max="10" value="6" />
+      </label>
+      <!--<label for="debug" style="display:flex; align-items:center; gap:0.4em; margin-top:0.35em;">
+        <input type="checkbox" id="debug" />
+        Mode debug
+      </label>-->
+      <input type="submit" value="Envoyer" />
+    </form>
+    <!--<p id="query-help">
+      Conseil: si vous cherchez un type très spécifique (ex: <code>jazz</code>) et que la base locale ne
+      contient pas ce mot-clé, l'assistant peut répondre en mode prudence. Commencez par une requête plus
+      large puis affinez.
+    </p>-->
+
+    <div id="ask-output" aria-live="polite">
+      <p class="status-line" id="api-status">Verification de l API locale...</p>
+    </div>
+
+    <footer id="footer">
+      <ul class="icons">
+        <li>
+          <a href="/health" class="icon solid fa-heartbeat"><span class="label">Health</span></a>
+        </li>
+        <li>
+          <a href="/metadata" class="icon solid fa-database"><span class="label">Metadata</span></a>
+        </li>
+        <li>
+          <a href="/app" class="icon solid fa-robot"><span class="label">App</span></a>
+        </li>
+      </ul>
+      <ul class="copyright">
+        <li>&copy; Puls-Events</li>
+        <li>Theme: <a href="http://html5up.net">HTML5 UP</a></li>
+      </ul>
+    </footer>
+
+    <script src="/assets/js/main.js"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        var form = document.getElementById("signup-form");
+        var output = document.getElementById("ask-output");
+        var statusLine = document.getElementById("api-status");
+        if (!form || !output || !statusLine) {
+          return;
+        }
+        var fallbackPrefix = "Je ne peux pas répondre avec certitude à partir des données disponibles.";
+        var suggestedQuestion =
+          "Quels evenements culturels recommandes-tu a Montpellier dans les 30 prochains jours ?";
+
+        function escapeHtml(value) {
+          return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
+
+        function renderSources(sources) {
+          if (!Array.isArray(sources) || sources.length === 0) {
+            return "<p>Aucune source retournee.</p>";
+          }
+
+          var items = sources.map(function (source) {
+            var title = escapeHtml(source.title || source.event_id || "Evenement");
+            var rawUrl = source.url;
+            if (rawUrl === null || rawUrl === undefined) {
+              rawUrl = "";
+            }
+            if (typeof rawUrl !== "string") {
+              rawUrl = String(rawUrl);
+            }
+            rawUrl = rawUrl.trim();
+            var hasValidUrl =
+              rawUrl &&
+              rawUrl !== "{}" &&
+              rawUrl !== "[]" &&
+              rawUrl !== "#" &&
+              (rawUrl.indexOf("://") !== -1 || rawUrl.indexOf("/") === 0);
+            var safeUrl = hasValidUrl ? escapeHtml(rawUrl) : "";
+            var snippet = escapeHtml(source.snippet || "");
+            var meta = [
+              source.start_datetime || "",
+              source.city || "",
+              source.location_name || "",
+            ]
+              .filter(Boolean)
+              .join(" | ");
+
+            return (
+              "<li>" +
+              "<strong>" + title + "</strong><br/>" +
+              (hasValidUrl
+                ? "<a href=\"" +
+                  safeUrl +
+                  "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
+                  safeUrl +
+                  "</a>"
+                : "<span class=\"source-meta\">URL indisponible</span>") +
+              "<span class=\"source-meta\">" + escapeHtml(meta) + "</span>" +
+              (snippet ? "<div style=\"margin-top:0.45em;\">" + snippet + "</div>" : "") +
+              "</li>"
+            );
+          });
+
+          return "<ul class=\"sources-list\">" + items.join("") + "</ul>";
+        }
+
+        async function checkHealth() {
+          try {
+            var response = await fetch("/health");
+            var payload = await response.json();
+            if (response.ok && payload && payload.status === "ok") {
+              statusLine.textContent = "API locale disponible (" + (payload.version || "n/a") + ").";
+            } else {
+              statusLine.textContent = "API detectee mais statut inattendu.";
+            }
+          } catch (error) {
+            statusLine.textContent = "API non joignable. Lancez `python scripts/run_api.py`.";
+          }
+        }
+
+        form.addEventListener(
+          "submit",
+          async function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+
+            var questionField = document.getElementById("question");
+            var topKField = document.getElementById("top_k");
+            var debugField = document.getElementById("debug");
+
+            var question = (questionField.value || "").trim();
+            if (!question) {
+              output.innerHTML = "<p class=\"status-line\">Question obligatoire.</p>";
+              return;
+            }
+
+            var payload = {
+              question: question,
+              top_k: Number(topKField.value || 6),
+              debug: Boolean(debugField && debugField.checked),
+            };
+
+            output.innerHTML = "<p class=\"status-line\">Requête en cours...</p>";
+
+            try {
+              var response = await fetch("/ask", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              var body = await response.json();
+
+              if (!response.ok) {
+                var errorMessage =
+                  body && body.error && body.error.message
+                    ? body.error.message
+                    : "Erreur API";
+                output.innerHTML =
+                  "<p class=\"status-line\">Echec requete (" +
+                  response.status +
+                  "): " +
+                  escapeHtml(errorMessage) +
+                  "</p>";
+                return;
+              }
+
+              var answer = escapeHtml(body.answer || "");
+              var sourcesHtml = renderSources(body.sources || []);
+              var fallbackHint = "";
+              if ((body.answer || "").indexOf(fallbackPrefix) === 0) {
+                fallbackHint =
+                  "<p class=\"status-line\">" +
+                  "Astuce: essayez une question plus large, par exemple: " +
+                  "<code>" +
+                  escapeHtml(suggestedQuestion) +
+                  "</code>" +
+                  "</p>";
+              }
+
+              output.innerHTML =
+                "<h3>Reponse</h3>" +
+                "<pre>" +
+                answer +
+                "</pre>" +
+                fallbackHint +
+                "<h3>Sources</h3>" +
+                sourcesHtml;
+            } catch (error) {
+              output.innerHTML =
+                "<p class=\"status-line\">Impossible de contacter l API locale: " +
+                escapeHtml(String(error)) +
+                "</p>";
+            }
+          },
+          true
+        );
+
+        checkHealth();
+      })();
+    </script>
+  </body>
+</html>

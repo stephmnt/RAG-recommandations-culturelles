@@ -87,3 +87,19 @@ def test_minimum_fields_present():
 
     assert stats["processed_events"] == 1
     assert set(cleaned[0].keys()) == set(EVENT_RECORD_FIELDS)
+
+
+def test_url_normalization_ignores_empty_dict_url():
+    raw_event = _raw_event("evt-url", "Evenement url", "2025-07-10T18:30:00Z")
+    raw_event["canonicalUrl"] = {}
+    raw_event["url"] = {}
+    raw_event["link"] = {}
+
+    cleaned, stats = clean_events(
+        raw_events=[raw_event],
+        start_date="2025-01-01",
+        end_date="2026-01-31",
+    )
+
+    assert stats["processed_events"] == 1
+    assert cleaned[0]["url"] == ""
