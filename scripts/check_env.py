@@ -28,6 +28,7 @@ def print_versions() -> None:
     print(f"mistralai: {get_version('mistralai')}")
     print(f"pandas: {get_version('pandas')}")
     print(f"requests: {get_version('requests')}")
+    print(f"flask: {get_version('flask')}")
 
 
 def run_import_checks() -> list[str]:
@@ -59,6 +60,12 @@ def run_import_checks() -> list[str]:
         print("[OK] from mistral import MistralClient")
     except Exception as exc:  # pragma: no cover
         failures.append(f"from mistral import MistralClient -> {exc}")
+
+    try:
+        import flask  # noqa: F401
+        print("[OK] import flask")
+    except Exception as exc:  # pragma: no cover
+        failures.append(f"import flask -> {exc}")
 
     return failures
 

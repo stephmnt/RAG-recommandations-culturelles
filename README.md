@@ -1,40 +1,30 @@
-# POC RAG Puls-Events (Etapes 1 a 4)
+# POC RAG Puls-Events (Etapes 1 a 6)
 
 Ce depot couvre:
 
 - Etape 1: environnement reproductible (LangChain + Mistral + FAISS CPU)
 - Etape 2: recuperation + nettoyage OpenAgenda pour produire un dataset pret a indexer
 - Etape 3: chunking + embeddings + indexation FAISS persistante
-- Etape 4: moteur RAG (retrieval + generation Mistral) sans API web
+- Etape 4: moteur RAG (retrieval + generation Mistral)
+- Etape 5: API REST Flask (`/ask`, `/rebuild`, `/health`, `/metadata`)
+- Etape 6: conteneurisation Docker + run local pour la demo
 
-Hors scope actuel:
-
-- API FastAPI/Flask (etape 5)
-- dockerisation
-- evaluation RAGAS complete
-
-## Choix techniques (lead-level)
+## Choix techniques
 
 - Gestion d'environnement: `requirements.txt` avec versions fixes.
-- Portabilite: `faiss-cpu` (pas de `faiss-gpu`).
+- Portabilite: `faiss-cpu`.
 - Secrets: `.env` local uniquement, jamais versionne.
 - Zone geographique cible: `Departement de l'Herault (34)`.
 - Fenetre temporelle: historique glissant 365 jours + horizon a venir configurable.
 - Sortie etape 2: `events_processed.parquet` contenant `document_text` et `retrieval_metadata`.
-- Etape 3:
-  - chunking via `RecursiveCharacterTextSplitter`
-  - embeddings HF par defaut, fallback Mistral -> HF
-  - index FAISS persiste + metadata de build
-- Etape 4:
-  - retrieval top-k dedup par `event_id`
-  - contexte structure et borne en taille
-  - prompting FR anti-hallucination
-  - sortie JSON-serialisable avec sources et latences
+- Sortie etape 3: index FAISS persiste dans `artifacts/faiss_index`.
+- Etape 5/6: API Flask avec cache service RAG et endpoint admin de rebuild.
 
 ## Prerequis
 
-- Python 3.10 ou 3.11 recommande (minimum 3.8)
-- `pip` recent
+- Python 3.10 ou 3.11 recommande
+- pip recent
+- Docker Desktop (pour etape 6)
 
 ## Installation
 
@@ -50,7 +40,7 @@ Important:
 - Python 3.13 n'est pas supporte par ce lock (notamment `pyarrow==17.0.0`).
 - Utiliser Python 3.10/3.11 pour une installation stable.
 
-## Configuration des secrets
+## Configuration (`.env`)
 
 1. Copier l'exemple:
 
@@ -58,12 +48,13 @@ Important:
 cp .env.example .env
 ```
 
-2. Renseigner les cles dans `.env`:
+2. Renseigner au minimum:
 
-- `OPENAGENDA_API_KEY` (etapes 2)
-- `MISTRAL_API_KEY` (etape 4)
+- `OPENAGENDA_API_KEY` (etape 2)
+- `MISTRAL_API_KEY` (etapes 4-6)
+- `ADMIN_TOKEN` (protection endpoint `/rebuild`)
 
-3. Ne jamais commiter `.env` (deja ignore dans `.gitignore`).
+3. Ne jamais commiter `.env`.
 
 ## Smoke test environnement (Etape 1)
 
@@ -71,27 +62,9 @@ cp .env.example .env
 python3 scripts/check_env.py
 ```
 
-Le script:
+Le script affiche les versions et verifie les imports critiques.
 
-- affiche les versions de Python, langchain, faiss, mistralai, pandas, requests
-- verifie les imports critiques
-- retourne un code non-zero si un import echoue
-
-## Recuperer les donnees OpenAgenda (Etape 2)
-
-La configuration est centralisee dans `config.yaml`:
-
-- zone (departement 34 + ville pivot)
-- periode (`start_date`, `end_date`)
-- pagination (`page_size`, `max_pages`, `max_events`)
-- langue (`fr`)
-
-Si les dates sont vides, `scripts/build_dataset.py` applique:
-
-- `start_date = aujourd'hui - 365 jours`
-- `end_date = aujourd'hui + 90 jours`
-
-### Construire le dataset
+## Construire les donnees (Etape 2)
 
 ```bash
 python3 scripts/build_dataset.py --config config.yaml
@@ -107,222 +80,170 @@ Sorties:
 
 ```bash
 python3 scripts/build_index.py \
+  --config configs/indexing.yaml \
   --input data/processed/events_processed.parquet \
   --output artifacts/faiss_index
 ```
 
-Configuration par defaut dans `configs/indexing.yaml`:
+Sorties:
 
-- chunking (`chunk_size`, `chunk_overlap`, `min_chunk_size`, `separators`)
-- embeddings (`provider`, `huggingface_model`, `mistral_model`)
-- FAISS (`normalize_L2`)
+- `artifacts/faiss_index/index.faiss`
+- `artifacts/faiss_index/index.pkl`
+- `artifacts/faiss_index/index_metadata.json`
 
-### Tester une recherche locale sur l'index
-
-```bash
-python3 scripts/query_index.py --query "concert jazz montpellier ce week-end" --k 5
-```
-
-## Moteur RAG (Etape 4)
-
-Le moteur RAG est dans `src/rag/` et suit un flux single-turn:
-
-1. chargement de l'index FAISS local,
-2. retrieval top-k + deduplication par evenement,
-3. construction d'un contexte borne,
-4. generation via Mistral,
-5. retour structure: reponse + sources + meta (latences, model, prompt).
-
-### Configurer Mistral
+## Tester le moteur RAG en local (Etape 4)
 
 ```bash
-export MISTRAL_API_KEY="votre_cle"
-# Optionnel
-export MISTRAL_MODEL="mistral-small-latest"
+python3 scripts/ask_local.py --query "Quels evenements jazz a Montpellier cette semaine ?" --debug
 ```
 
-(ou renseigner ces variables dans `.env`).
+## API Flask (Etape 5)
 
-### Executer une question en local
+### Lancer l'API
 
 ```bash
-python scripts/ask_local.py --query "Quels evenements jazz a Montpellier cette semaine ?" --debug
+python3 scripts/run_api.py --host 127.0.0.1 --port 8000
 ```
 
-Options utiles:
+### Endpoints
 
-- `--top_k 6`
-- `--index_path artifacts/faiss_index`
-- `--prompt_version v1`
+- `GET /health`: etat de l'API et presence index
+- `GET /metadata`: metadata index + config RAG
+- `POST /ask`: question utilisateur + top_k optionnel + filtres optionnels
+- `POST /rebuild`: `mode=reload|rebuild`, protege par header `X-ADMIN-TOKEN`
 
-### Comprendre les sources
-
-Chaque source retournee contient:
-
-- `event_id`, `title`, `start_datetime`, `end_datetime`
-- `city`, `location_name`, `url`
-- `score` (si disponible)
-- `snippet` (extrait court du chunk)
-
-Le service limite les sources dedupliquees a `max_sources` (defaut 5).
-
-### Evaluation smoke (sans RAGAS)
-
-Jeu d'evaluation synthétique versionne:
-
-- `data/eval/smoke_eval.jsonl`
-
-Lancer l'evaluation:
+### Exemple `/ask`
 
 ```bash
-python scripts/evaluate_smoke.py --offline
+curl -s -X POST http://127.0.0.1:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Quels evenements jazz dans l Herault ?",
+    "top_k": 6,
+    "debug": true
+  }' | jq
 ```
 
-Sortie:
+### Exemple `/rebuild` (reload)
 
-- rapport JSON: `reports/smoke_eval_report.json`
-- resume console: taux URL attendues, overlap de mots-cles
+```bash
+curl -s -X POST http://127.0.0.1:8000/rebuild \
+  -H "Content-Type: application/json" \
+  -H "X-ADMIN-TOKEN: ${ADMIN_TOKEN}" \
+  -d '{"mode":"reload"}' | jq
+```
 
-## Ou sont stockes les artifacts ?
+### Smoke test API
 
-- Index FAISS: `artifacts/faiss_index/`
-- Metadata de build index: `artifacts/faiss_index/index_metadata.json`
-- Logs: `logs/`
-- Rapport smoke: `reports/smoke_eval_report.json`
+```bash
+python3 scripts/api_test.py --base-url http://127.0.0.1:8000 --admin-token "$ADMIN_TOKEN"
+```
 
-Les gros binaires et sorties runtime sont ignores par git.
+## Conteneurisation Docker (Etape 6)
 
-## Rebuild de l'index (determinisme et parametres)
+### Build image
 
-Le rebuild est reproductible via:
+```bash
+docker build -t puls-events-rag:step6 .
+```
 
-- dataset d'entree explicite
-- config explicite (`configs/indexing.yaml`)
-- hash dataset (`dataset_hash`) dans `index_metadata.json`
-- resume des parametres chunking/embeddings/FAISS
+### Run container
 
-## Compatibilite LangChain
+```bash
+docker run --rm \
+  -p 8000:8000 \
+  --env-file .env \
+  -v "$(pwd)/artifacts:/app/artifacts" \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/logs:/app/logs" \
+  puls-events-rag:step6
+```
 
-Imports robustes selon versions:
+### Run via Docker Compose
 
-- vectorstore: `langchain_community.vectorstores.FAISS` puis fallback `langchain.vectorstores.FAISS`
-- embeddings HF/Mistral: fallback gere dans la factory
+```bash
+docker compose up --build
+```
 
-## Lancer les tests
+### Script demo etape 6 (build index + build image + run)
 
-Tests unitaires rapides (offline):
+```bash
+./scripts/step6_docker_demo.sh
+```
+
+### Scenarios de demo proposes (soutenance)
+
+1. `Quels evenements jazz dans l Herault cette semaine ?`
+2. `Je cherche une sortie famille a Montpellier ce week-end.`
+3. `Quelles expositions autour de Beziers dans les 30 prochains jours ?`
+
+## Commande end-to-end locale
+
+Le bootstrap existant execute l'ordre complet:
+
+```bash
+python3 scripts/bootstrap_app.py
+```
+
+Etapes executees:
+
+1. `scripts/check_env.py`
+2. `scripts/build_dataset.py` (si dataset manquant/invalide)
+3. `scripts/build_index.py`
+4. `scripts/run_api.py`
+5. `scripts/api_test.py`
+
+## Tests
 
 ```bash
 pytest -q
 ```
 
-Inclure les tests lents performance:
+## Depannage rapide
 
-```bash
-pytest -q -m slow
-```
+- `INDEX_UNAVAILABLE`: lancer `scripts/build_index.py` ou `/rebuild` mode `rebuild`.
+- `UNAUTHORIZED` sur `/rebuild`: header `X-ADMIN-TOKEN` absent.
+- `FORBIDDEN` sur `/rebuild`: token invalide.
+- `MISTRAL_API_KEY` manquante: l'API repondra avec fallback sur la generation.
+- OpenAgenda `403`: verifier la cle et les droits de lecture.
 
-## Depannage
-
-### Etapes 1-2
-
-- Cle OpenAgenda absente ou invalide (`401/403`): verifier `.env` + quotas.
-- Timeouts OpenAgenda: augmenter `request.timeout_seconds`, reduire `page_size`.
-- Pagination insuffisante: augmenter `max_pages`/`max_events`.
-
-### Etape 3
-
-- Import FAISS/LangChain en echec: verifier versions Python/dependances.
-- Provider `mistral` sans cle: fallback auto HF avec warning.
-- Index introuvable: rebuild via `scripts/build_index.py`.
-
-### Etape 4
-
-- `MISTRAL_API_KEY` manquante: generation impossible (retrieval local reste disponible).
-- Quota/API Mistral: utiliser `scripts/evaluate_smoke.py --offline` pour test sans reseau.
-- Reponse sans sources: la question est trop large ou le dataset/index est incomplet.
-
-## Notebook de validation
-
-Notebook pedagogique:
-
-- `notebooks/validation_etapes_1_2.ipynb`
-
-Il couvre les validations et demonstrations des etapes 1 a 3.
-
-## Structure du depot (Etapes 1-4)
+## Arborescence (principale)
 
 ```text
 .
-├── .env.example
-├── .gitignore
-├── README.md
+├── Dockerfile
+├── docker-compose.yml
 ├── config.yaml
 ├── configs/
 │   └── indexing.yaml
 ├── requirements.txt
-├── artifacts/
-│   ├── README.md
-│   └── faiss_index/
-│       └── README.md
-├── data/
-│   ├── eval/
-│   │   └── smoke_eval.jsonl
-│   └── sample/
-│       └── events_sample.jsonl
-├── logs/
-│   └── .gitkeep
-├── reports/
-│   └── .gitkeep
-├── mistral/
-│   └── __init__.py
-├── notebooks/
-│   └── validation_etapes_1_2.ipynb
 ├── scripts/
+│   ├── api_test.py
 │   ├── ask_local.py
+│   ├── bootstrap_app.py
 │   ├── build_dataset.py
 │   ├── build_index.py
 │   ├── check_env.py
-│   ├── evaluate_smoke.py
-│   └── query_index.py
+│   ├── run_api.py
+│   └── step6_docker_demo.sh
 ├── src/
-│   ├── __init__.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── app.py
+│   │   ├── config.py
+│   │   ├── deps.py
+│   │   ├── errors.py
+│   │   ├── exceptions.py
+│   │   ├── index_manager.py
+│   │   ├── routes.py
+│   │   └── schemas.py
 │   ├── indexing/
-│   │   ├── __init__.py
-│   │   ├── build_index.py
-│   │   ├── chunking.py
-│   │   ├── embeddings.py
-│   │   └── search.py
 │   ├── openagenda/
-│   │   ├── __init__.py
-│   │   └── client.py
 │   ├── preprocess/
-│   │   ├── __init__.py
-│   │   ├── cleaning.py
-│   │   └── schema.py
 │   └── rag/
-│       ├── __init__.py
-│       ├── context.py
-│       ├── llm.py
-│       ├── prompts.py
-│       ├── retriever.py
-│       ├── service.py
-│       └── types.py
 └── tests/
-    ├── conftest.py
-    ├── test_cleaning.py
-    ├── test_client.py
-    ├── test_indexing_chunking.py
-    ├── test_indexing_pipeline.py
-    ├── test_rag_prompting.py
-    ├── test_rag_retrieval.py
-    ├── test_rag_service.py
-    └── test_schema.py
+    ├── test_api_ask.py
+    ├── test_api_health_metadata.py
+    ├── test_api_rebuild.py
+    └── ...
 ```
-
-## Reproductibilite
-
-- Dependances figees dans `requirements.txt`.
-- Aucun secret versionne.
-- Sorties runtime ignorees (`data/`, `artifacts/faiss_index/`, `reports/`, `logs/`).
-- Pipelines parametrables via `config.yaml`, `configs/indexing.yaml` et variables d'environnement.
