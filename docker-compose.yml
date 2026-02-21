@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: puls-events-rag-api
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      FLASK_ENV: dev
+      LOG_LEVEL: INFO
+      INDEX_PATH: /app/artifacts/faiss_index
+      DATASET_PATH: /app/data/processed/events_processed.parquet
+      INDEXING_CONFIG_PATH: /app/configs/indexing.yaml
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./logs:/app/logs

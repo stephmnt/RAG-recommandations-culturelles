@@ -1,4 +1,4 @@
-# POC RAG Puls-Events (Etapes 1 a 5)
+# POC RAG Puls-Events (Etapes 1 a 6)
 
 Ce depot couvre:
 
@@ -7,10 +7,10 @@ Ce depot couvre:
 - Etape 3: chunking + embeddings + indexation FAISS persistante
 - Etape 4: moteur RAG (retrieval + generation Mistral)
 - Etape 5: API REST Flask locale (`/ask`, `/rebuild`, `/health`, `/metadata`)
+- Etape 6: conteneurisation Docker + run local pour la demo
 
 Hors scope actuel:
 
-- Docker (etape 6)
 - evaluation RAGAS complete
 
 ## Choix techniques
@@ -32,6 +32,7 @@ Hors scope actuel:
 
 - Python 3.10 ou 3.11 recommande
 - `pip` recent
+- Docker Desktop (etape 6)
 
 ## Installation
 
@@ -318,6 +319,38 @@ Mode sans appel live generation:
 python3 scripts/api_test.py --offline
 ```
 
+## Etape 6 - Docker (build/run local)
+
+Build image:
+
+```bash
+docker build -t puls-events-rag:step6 .
+```
+
+Run container:
+
+```bash
+docker run --rm \
+  -p 8000:8000 \
+  --env-file .env \
+  -v "$(pwd)/artifacts:/app/artifacts" \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/logs:/app/logs" \
+  puls-events-rag:step6
+```
+
+Run avec compose:
+
+```bash
+docker compose up --build
+```
+
+Script demo complet (index + image + run):
+
+```bash
+./scripts/step6_docker_demo.sh
+```
+
 ## Codes d'erreur API
 
 - `400` `INVALID_REQUEST`: payload invalide, question vide, mode invalide.
@@ -361,10 +394,13 @@ Les tests API utilisent `Flask test_client` et des mocks (pas de dependance rese
 - Erreurs imports LangChain/FAISS:
   - verifier `pip install -r requirements.txt` et version Python.
 
-## Structure du depot (Etapes 1-5)
+## Structure du depot (Etapes 1-6)
 
 ```text
 .
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
 ├── .env.example
 ├── README.md
 ├── requirements.txt
@@ -373,6 +409,8 @@ Les tests API utilisent `Flask test_client` et des mocks (pas de dependance rese
 │   └── indexing.yaml
 ├── scripts/
 │   ├── api_test.py
+│   ├── step6_docker_demo.sh
+│   ├── bootstrap_app.py
 │   ├── run_api.py
 │   ├── build_dataset.py
 │   ├── build_index.py
