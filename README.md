@@ -87,13 +87,13 @@ cp .env.example .env
 ## Smoke test environnement (Etape 1)
 
 ```bash
-python3 scripts/check_env.py
+python3 app.py check-env
 ```
 
 ## Etape 2 - Construire le dataset
 
 ```bash
-python3 scripts/build_dataset.py --config config.yaml
+python3 app.py build-dataset --config config.yaml
 ```
 
 Sorties:
@@ -105,7 +105,7 @@ Sorties:
 ## Etape 3 - Construire l'index FAISS
 
 ```bash
-python3 scripts/build_index.py \
+python3 app.py build-index \
   --input data/processed/events_processed.parquet \
   --output artifacts/faiss_index
 ```
@@ -113,7 +113,7 @@ python3 scripts/build_index.py \
 Test recherche locale:
 
 ```bash
-python3 scripts/query_index.py --query "concert jazz montpellier" --k 5
+python3 app.py query-index --query "concert jazz montpellier" --k 5
 ```
 
 ## Etape 4 - Moteur RAG local
@@ -121,13 +121,13 @@ python3 scripts/query_index.py --query "concert jazz montpellier" --k 5
 Question locale (sans API):
 
 ```bash
-python3 scripts/ask_local.py --query "Quels evenements jazz en Occitanie ?" --debug
+python3 app.py ask-local --query "Quels evenements jazz en Occitanie ?" --debug
 ```
 
 Smoke eval simple:
 
 ```bash
-python3 scripts/evaluate_smoke.py --offline
+python3 app.py evaluate-smoke --offline
 ```
 
 ## API Flask (Etape 5)
@@ -135,7 +135,7 @@ python3 scripts/evaluate_smoke.py --offline
 ### Lancer l'API
 
 ```bash
-python3 scripts/run_api.py
+python3 app.py run-api
 ```
 
 ### Interface graphique locale (sans changer les URLs API)
@@ -152,26 +152,26 @@ Le formulaire de la page appelle directement `POST /ask` via JavaScript (`fetch`
 Pour preparer puis demarrer l'app en une commande (avec duree de chaque etape):
 
 ```bash
-python3 scripts/bootstrap_app.py
+python3 app.py bootstrap
 ```
 
 Options utiles:
 
 ```bash
 # Ne fait pas d'appel OpenAgenda (utilise dataset deja present)
-python3 scripts/bootstrap_app.py --offline
+python3 app.py bootstrap --offline
 
 # Prepare seulement (sans demarrer l'API)
-python3 scripts/bootstrap_app.py --prepare-only
+python3 app.py bootstrap --prepare-only
 
 # Demarre l'API, fait un smoke test, puis s'arrete
-python3 scripts/bootstrap_app.py --exit-after-smoke
+python3 app.py bootstrap --exit-after-smoke
 ```
 
 Options utiles:
 
 ```bash
-python3 scripts/run_api.py --host 127.0.0.1 --port 8000 --log-level INFO
+python3 app.py run-api --host 127.0.0.1 --port 8000 --log-level INFO
 ```
 
 ### Endpoints
@@ -310,13 +310,13 @@ print(requests.post(
 ### Script de smoke manuel API
 
 ```bash
-python3 scripts/api_test.py --base-url http://127.0.0.1:8000
+python3 app.py api-test --base-url http://127.0.0.1:8000
 ```
 
 Mode sans appel live generation:
 
 ```bash
-python3 scripts/api_test.py --offline
+python3 app.py api-test --offline
 ```
 
 ## Etape 6 - Docker (build/run local)
@@ -348,7 +348,7 @@ docker compose up --build
 Script demo complet (index + image + run):
 
 ```bash
-./scripts/step6_docker_demo.sh
+python3 app.py step6-docker-demo
 ```
 
 ## Codes d'erreur API
@@ -386,7 +386,7 @@ Les tests API utilisent `Flask test_client` et des mocks (pas de dependance rese
 ## Troubleshooting
 
 - `INDEX_UNAVAILABLE`:
-  - construire l'index (`scripts/build_index.py`) ou appeler `/rebuild` mode `rebuild`.
+  - construire l'index (`python app.py build-index`) ou appeler `/rebuild` mode `rebuild`.
 - `/rebuild` retourne `401/403`:
   - verifier `ADMIN_TOKEN` et header `X-ADMIN-TOKEN`.
 - Mistral non configure:
@@ -407,17 +407,7 @@ Les tests API utilisent `Flask test_client` et des mocks (pas de dependance rese
 ├── config.yaml
 ├── configs/
 │   └── indexing.yaml
-├── scripts/
-│   ├── api_test.py
-│   ├── step6_docker_demo.sh
-│   ├── bootstrap_app.py
-│   ├── run_api.py
-│   ├── build_dataset.py
-│   ├── build_index.py
-│   ├── check_env.py
-│   ├── query_index.py
-│   ├── ask_local.py
-│   └── evaluate_smoke.py
+├── app.py
 ├── src/
 │   ├── api/
 │   │   ├── __init__.py

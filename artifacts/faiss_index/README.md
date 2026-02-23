@@ -1,6 +1,6 @@
 # FAISS Index Output
 
-Ce dossier est le point de sortie du script `scripts/build_index.py`.
+Ce dossier est le point de sortie de la commande `python app.py build-index`.
 
 Fichiers attendus apres build:
 

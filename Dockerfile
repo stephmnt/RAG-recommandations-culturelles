@@ -9,8 +9,8 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && pip install -r /app/requirements.txt
 
+COPY app.py /app/app.py
 COPY src /app/src
-COPY scripts /app/scripts
 COPY configs /app/configs
 COPY mistral /app/mistral
 COPY config.yaml /app/config.yaml
@@ -20,4 +20,4 @@ RUN mkdir -p /app/data /app/artifacts /app/logs /app/reports
 
 EXPOSE 8000
 
-CMD ["python", "scripts/run_api.py", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "app.py", "run-api", "--host", "0.0.0.0", "--port", "8000"]
