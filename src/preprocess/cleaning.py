@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
+from collections import Counter
 from datetime import date, datetime, timezone
 from hashlib import sha1
 from typing import Any
@@ -19,11 +22,67 @@ DATE_FORMATS = (
     "%d/%m/%Y %H:%M",
 )
 
+OCCITANIE_REGION_ALIASES = {
+    "occitanie",
+    "region occitanie",
+    "languedoc-roussillon-midi-pyrenees",
+    "languedoc roussillon midi pyrenees",
+}
+
+OCCITANIE_DEPARTMENT_CODES = {
+    "09",
+    "11",
+    "12",
+    "30",
+    "31",
+    "32",
+    "34",
+    "46",
+    "48",
+    "65",
+    "66",
+    "81",
+    "82",
+}
+
+OCCITANIE_DEPARTMENT_NAMES = {
+    "ariege",
+    "aude",
+    "aveyron",
+    "gard",
+    "haute garonne",
+    "haute-garonne",
+    "gers",
+    "herault",
+    "lot",
+    "lozere",
+    "hautes pyrenees",
+    "hautes-pyrenees",
+    "pyrenees orientales",
+    "pyrenees-orientales",
+    "tarn",
+    "tarn et garonne",
+    "tarn-et-garonne",
+}
+
 
 def _clean_text(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _normalize_token(value: Any) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+    normalized = (
+        unicodedata.normalize("NFKD", text)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .lower()
+    )
+    return re.sub(r"\s+", " ", normalized).strip()
 
 
 def _normalize_url(value: Any, language: str = "fr") -> str:
@@ -221,6 +280,22 @@ def _normalize_location(
     return city, location_name, address, latitude, longitude
 
 
+def _extract_region_and_department(raw_event: dict[str, Any], language: str = "fr") -> tuple[str, str]:
+    location = raw_event.get("location")
+    if not isinstance(location, dict):
+        location = {}
+
+    region = (
+        _pick_localized_text(location.get("region"), language)
+        or _pick_localized_text(raw_event.get("region"), language)
+    )
+    department = (
+        _pick_localized_text(location.get("department"), language)
+        or _pick_localized_text(raw_event.get("department"), language)
+    )
+    return region, department
+
+
 def _resolve_event_id(
     raw_event: dict[str, Any],
     *,
@@ -254,6 +329,8 @@ def _build_retrieval_metadata(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "event_id": record.get("event_id", ""),
         "city": record.get("city", ""),
+        "region": record.get("region", ""),
+        "department": record.get("department", ""),
         "start_datetime": record.get("start_datetime", ""),
         "end_datetime": record.get("end_datetime", ""),
         "source": record.get("source", "openagenda"),
@@ -281,6 +358,7 @@ def select_and_normalize_fields(
         language=language,
     )
     tags = _normalize_tags(raw_event.get("tags"), language)
+    region, department = _extract_region_and_department(raw_event, language=language)
 
     event_id = _resolve_event_id(
         raw_event,
@@ -297,6 +375,8 @@ def select_and_normalize_fields(
         "start_datetime": start_datetime,
         "end_datetime": end_datetime,
         "city": city,
+        "region": region,
+        "department": department,
         "location_name": location_name,
         "address": address,
         "latitude": latitude,
@@ -310,6 +390,63 @@ def select_and_normalize_fields(
     record["document_text"] = build_document_text(record)
     record["retrieval_metadata"] = _build_retrieval_metadata(record)
     return record
+
+
+def _department_in_occitanie(department: str) -> bool:
+    token = _normalize_token(department)
+    if not token:
+        return False
+    if token in OCCITANIE_DEPARTMENT_NAMES:
+        return True
+    code_matches = re.findall(r"\b\d{2}\b", token)
+    return any(code in OCCITANIE_DEPARTMENT_CODES for code in code_matches)
+
+
+def _region_in_occitanie(region: str) -> bool:
+    token = _normalize_token(region)
+    if not token:
+        return False
+    return token in OCCITANIE_REGION_ALIASES or "occitanie" in token
+
+
+def _in_occitanie_bbox(latitude: float | None, longitude: float | None) -> bool | None:
+    if latitude is None or longitude is None:
+        return None
+    # Large bounding box covering Occitanie.
+    if 42.2 <= latitude <= 45.2 and -0.3 <= longitude <= 4.9:
+        return True
+    return False
+
+
+def _is_in_geo_scope(
+    record: dict[str, Any],
+    *,
+    mode: str,
+    strict: bool,
+) -> bool:
+    if mode != "occitanie":
+        return True
+
+    region = _clean_text(record.get("region"))
+    department = _clean_text(record.get("department"))
+    latitude = record.get("latitude")
+    longitude = record.get("longitude")
+
+    if region:
+        if _region_in_occitanie(region):
+            return True
+        return False
+
+    if department:
+        if _department_in_occitanie(department):
+            return True
+        return False
+
+    in_bbox = _in_occitanie_bbox(latitude, longitude)
+    if in_bbox is not None:
+        return bool(in_bbox)
+
+    return not strict
 
 
 def _is_in_period(start_datetime: str, start_date: date, end_date: date) -> bool:
@@ -371,21 +508,30 @@ def clean_events(
     end_date: str | date | datetime,
     language: str = "fr",
     source: str = "openagenda",
-) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    geo_scope: dict[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Clean, filter, deduplicate and validate OpenAgenda events."""
 
     start = _coerce_date(start_date)
     end = _coerce_date(end_date)
 
+    geo_scope = geo_scope or {}
+    geo_mode = _normalize_token(geo_scope.get("mode", ""))
+    geo_strict = bool(geo_scope.get("strict", True))
+
     stats = {
         "raw_events": len(raw_events),
         "missing_required": 0,
+        "outside_geo_scope": 0,
         "outside_period": 0,
         "after_period_filter": 0,
         "duplicates_removed": 0,
         "invalid_records": 0,
         "processed_events": 0,
     }
+    external_city_counter: Counter[str] = Counter()
+    external_region_counter: Counter[str] = Counter()
+    external_department_counter: Counter[str] = Counter()
 
     filtered: list[dict[str, Any]] = []
     for raw_event in raw_events:
@@ -393,6 +539,16 @@ def clean_events(
 
         if not record["title"] or not record["start_datetime"]:
             stats["missing_required"] += 1
+            continue
+
+        if not _is_in_geo_scope(record, mode=geo_mode, strict=geo_strict):
+            stats["outside_geo_scope"] += 1
+            if record.get("city"):
+                external_city_counter[_clean_text(record.get("city"))] += 1
+            if record.get("region"):
+                external_region_counter[_clean_text(record.get("region"))] += 1
+            if record.get("department"):
+                external_department_counter[_clean_text(record.get("department"))] += 1
             continue
 
         if not _is_in_period(record["start_datetime"], start, end):
@@ -421,4 +577,9 @@ def clean_events(
         validated_records.append(event.to_dict())
 
     stats["processed_events"] = len(validated_records)
+    stats["geo_scope_mode"] = geo_mode or "none"
+    stats["geo_scope_strict"] = geo_strict
+    stats["external_city_counts"] = dict(external_city_counter.most_common(25))
+    stats["external_region_counts"] = dict(external_region_counter.most_common(25))
+    stats["external_department_counts"] = dict(external_department_counter.most_common(25))
     return validated_records, stats

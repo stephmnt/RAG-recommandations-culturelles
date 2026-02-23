@@ -12,6 +12,8 @@ def _raw_event(uid: str, title: str, start_iso: str) -> dict:
             "name": {"fr": "Salle test"},
             "address": "10 rue de la Republique",
             "city": "Montpellier",
+            "department": "Hérault",
+            "region": "Occitanie",
             "latitude": 43.6119,
             "longitude": 3.8772,
         },
@@ -103,3 +105,31 @@ def test_url_normalization_ignores_empty_dict_url():
 
     assert stats["processed_events"] == 1
     assert cleaned[0]["url"] == ""
+
+
+def test_cleaning_geo_scope_occitanie_filters_external_city():
+    bordeaux = _raw_event("evt-bdx", "Evenement Bordeaux", "2025-07-10T18:30:00Z")
+    bordeaux["location"]["city"] = "Bordeaux"
+    bordeaux["location"]["department"] = "Gironde"
+    bordeaux["location"]["region"] = "Nouvelle-Aquitaine"
+    bordeaux["location"]["latitude"] = 44.8378
+    bordeaux["location"]["longitude"] = -0.5792
+
+    saint_gaudens = _raw_event("evt-stg", "Evenement Saint-Gaudens", "2025-07-11T18:30:00Z")
+    saint_gaudens["location"]["city"] = "Saint-Gaudens"
+    saint_gaudens["location"]["department"] = "Haute-Garonne"
+    saint_gaudens["location"]["region"] = "Occitanie"
+    saint_gaudens["location"]["latitude"] = 43.1086
+    saint_gaudens["location"]["longitude"] = 0.7233
+
+    cleaned, stats = clean_events(
+        raw_events=[bordeaux, saint_gaudens],
+        start_date="2025-01-01",
+        end_date="2026-01-31",
+        geo_scope={"mode": "occitanie", "strict": True},
+    )
+
+    assert stats["outside_geo_scope"] == 1
+    assert stats["processed_events"] == 1
+    assert cleaned[0]["city"] == "Saint-Gaudens"
+    assert stats["external_city_counts"].get("Bordeaux") == 1

@@ -499,7 +499,7 @@ def fetch_agendas(
     config: OpenAgendaConfig,
     session: requests.Session | None = None,
 ) -> list[dict[str, Any]]:
-    """Fetch agenda list from explicit UIDs or search strategy around Montpellier."""
+    """Fetch agenda list from explicit UIDs or keyword-based regional search."""
 
     if config.agenda_uids:
         return [{"uid": uid, "title": ""} for uid in config.agenda_uids if uid]

@@ -112,7 +112,7 @@
     <header id="header">
       <h1>Puls-Events</h1>
       <p>
-        Assistant de recommandation culturelle pour l'Hérault.<br />
+        Assistant de recommandation culturelle pour l'Occitanie.<br />
         Posez une question et obtenez une réponse justifiée par des sources.
       </p>
     </header>
@@ -122,8 +122,8 @@
         type="text"
         name="question"
         id="question"
-        placeholder="Ex: Quels evenements culturels recommandes-tu a Montpellier dans les 30 prochains jours ?"
-        value="Quels evenements culturels recommandes-tu a Montpellier dans les 30 prochains jours ?"
+        placeholder="Ex: Quels evenements culturels recommandes-tu en Occitanie dans les 30 prochains jours ?"
+        value="Quels evenements culturels recommandes-tu en Occitanie dans les 30 prochains jours ?"
         required
       />
       <label for="top_k" style="display:flex; flex-direction:column; gap:0.2em;">
@@ -177,7 +177,7 @@
         }
         var fallbackPrefix = "Je ne peux pas répondre avec certitude à partir des données disponibles.";
         var suggestedQuestion =
-          "Quels evenements culturels recommandes-tu a Montpellier dans les 30 prochains jours ?";
+          "Quels evenements culturels recommandes-tu en Occitanie dans les 30 prochains jours ?";
 
         function escapeHtml(value) {
           return String(value || "")

@@ -7,19 +7,27 @@ openagenda:
   agenda_uids: []
   agenda_search:
     queries:
+      - "Occitanie"
+      - "Toulouse"
       - "Montpellier"
-      - "Herault"
-      - "34"
-    max_agendas: 25
+      - "Nimes"
+      - "Perpignan"
+      - "Rodez"
+      - "Albi"
+      - "Tarbes"
+    max_agendas: 120
     page_size: 50
-    max_pages: 5
+    max_pages: 8
     extra_params: {}
   location:
-    department: "34"
-    city: "Montpellier"
-    latitude: 43.6119
-    longitude: 3.8772
-    radius_km: 55
+    department: ""
+    city: ""
+    latitude: null
+    longitude: null
+    radius_km: null
+  geo_scope:
+    mode: "occitanie"
+    strict: true
   time_window:
     start_date: ""
     end_date: ""
@@ -30,7 +38,7 @@ openagenda:
     backoff_seconds: 1.0
   pagination:
     page_size: 100
-    max_pages: 20
-    max_events: 1000
+    max_pages: 40
+    max_events: 4000
   allow_legacy_events_fallback: false
   filters: {}

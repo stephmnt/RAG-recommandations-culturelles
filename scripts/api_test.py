@@ -85,7 +85,7 @@ def main() -> int:
 
         if not args.offline:
             ask_payload = {
-                "question": "Quels evenements jazz dans l'Herault cette semaine ?",
+                "question": "Quels evenements jazz en Occitanie cette semaine ?",
                 "top_k": 6,
                 "debug": False,
             }

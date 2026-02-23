@@ -126,10 +126,14 @@ def print_summary(summary: dict[str, Any]) -> None:
     print(f"Agendas scanned          : {summary['agendas_scanned']}")
     print(f"Legacy fallback used     : {summary['legacy_fallback_used']}")
     print(f"Raw events fetched        : {summary['raw_events']}")
+    print(f"Outside geo scope         : {summary['outside_geo_scope']}")
     print(f"After period filtering    : {summary['after_period_filter']}")
     print(f"Duplicates removed        : {summary['duplicates_removed']}")
     print(f"Invalid records dropped   : {summary['invalid_records']}")
     print(f"Final processed records   : {summary['processed_events']}")
+    print(f"Geo scope mode            : {summary['geo_scope_mode']}")
+    print(f"Geo strict mode           : {summary['geo_scope_strict']}")
+    print(f"Top external cities       : {summary['external_city_counts']}")
     print(f"Events by agenda          : {summary['events_by_agenda']}")
     print(f"Raw output                : {summary['raw_output']}")
     print(f"Processed output          : {summary['processed_output']}")
@@ -175,12 +179,14 @@ def main() -> int:
         logger.info("Raw events written to %s", raw_output)
 
         logger.info("Cleaning and validating events")
+        geo_scope = config.get("openagenda", {}).get("geo_scope", {})
         records, stats = clean_events(
             raw_events=raw_events,
             start_date=start_date,
             end_date=end_date,
             language=oa_config.language,
             source="openagenda",
+            geo_scope=geo_scope if isinstance(geo_scope, dict) else {},
         )
         write_parquet(processed_output, records)
         logger.info("Processed events written to %s", processed_output)
@@ -190,10 +196,14 @@ def main() -> int:
             "agendas_scanned": ingestion_stats.get("agendas_scanned", 0),
             "legacy_fallback_used": ingestion_stats.get("legacy_fallback_used", False),
             "raw_events": len(raw_events),
+            "outside_geo_scope": stats["outside_geo_scope"],
             "after_period_filter": stats["after_period_filter"],
             "duplicates_removed": stats["duplicates_removed"],
             "invalid_records": stats["invalid_records"],
             "processed_events": stats["processed_events"],
+            "geo_scope_mode": stats.get("geo_scope_mode", "none"),
+            "geo_scope_strict": stats.get("geo_scope_strict", True),
+            "external_city_counts": stats.get("external_city_counts", {}),
             "events_by_agenda": ingestion_stats.get("events_by_agenda", {}),
             "raw_output": str(raw_output),
             "processed_output": str(processed_output),

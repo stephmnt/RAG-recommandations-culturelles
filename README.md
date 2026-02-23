@@ -18,7 +18,7 @@ Hors scope actuel:
 - Environnement: `requirements.txt` fige.
 - Portabilite: `faiss-cpu`.
 - Secrets: `.env` local, jamais versionne.
-- Zone metier: departement de l'Herault (34).
+- Zone metier: region Occitanie (couverture multi-villes).
 - Donnees: `document_text` + `retrieval_metadata` prepares en etape 2.
 - Retrieval: FAISS + LangChain avec imports compatibles `langchain_community`/`langchain`.
 - API Flask:
@@ -121,7 +121,7 @@ python3 scripts/query_index.py --query "concert jazz montpellier" --k 5
 Question locale (sans API):
 
 ```bash
-python3 scripts/ask_local.py --query "Quels evenements jazz dans l'Herault ?" --debug
+python3 scripts/ask_local.py --query "Quels evenements jazz en Occitanie ?" --debug
 ```
 
 Smoke eval simple:
@@ -182,11 +182,11 @@ Request JSON:
 
 ```json
 {
-  "question": "Quels concerts jazz dans l'Herault cette semaine ?",
+  "question": "Quels concerts jazz en Occitanie cette semaine ?",
   "top_k": 6,
   "debug": false,
   "filters": {
-    "city": "Montpellier",
+    "city": "Toulouse",
     "date_from": "2026-02-01",
     "date_to": "2026-02-28"
   }
@@ -283,7 +283,7 @@ curl -s http://127.0.0.1:8000/metadata | jq
 ```bash
 curl -s -X POST http://127.0.0.1:8000/ask \
   -H "Content-Type: application/json" \
-  -d '{"question":"Quels evenements jazz dans l'"'"'Herault ?","top_k":6}' | jq
+  -d '{"question":"Quels evenements jazz en Occitanie ?","top_k":6}' | jq
 ```
 
 ```bash
@@ -302,7 +302,7 @@ base = "http://127.0.0.1:8000"
 print(requests.get(f"{base}/health", timeout=10).json())
 print(requests.post(
     f"{base}/ask",
-    json={"question": "Quels concerts jazz dans l'Herault ?", "top_k": 6},
+    json={"question": "Quels concerts jazz en Occitanie ?", "top_k": 6},
     timeout=30,
 ).json())
 ```

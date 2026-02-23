@@ -13,6 +13,8 @@ EVENT_RECORD_FIELDS = [
     "start_datetime",
     "end_datetime",
     "city",
+    "region",
+    "department",
     "location_name",
     "address",
     "latitude",
@@ -76,6 +78,8 @@ class EventRecord:
     start_datetime: str = ""
     end_datetime: str = ""
     city: str = ""
+    region: str = ""
+    department: str = ""
     location_name: str = ""
     address: str = ""
     latitude: float | None = None
@@ -93,6 +97,8 @@ class EventRecord:
         self.start_datetime = _clean_text(self.start_datetime)
         self.end_datetime = _clean_text(self.end_datetime)
         self.city = _clean_text(self.city)
+        self.region = _clean_text(self.region)
+        self.department = _clean_text(self.department)
         self.location_name = _clean_text(self.location_name)
         self.address = _clean_text(self.address)
         self.url = _clean_text(self.url)
@@ -134,6 +140,8 @@ class EventRecord:
         defaults = {
             "event_id": self.event_id,
             "city": self.city,
+            "region": self.region,
+            "department": self.department,
             "start_datetime": self.start_datetime,
             "end_datetime": self.end_datetime,
             "source": self.source,
