@@ -1,4 +1,4 @@
-# POC RAG Puls-Events (Etapes 1 a 6)
+# Assistant intelligent de recommandations culturelles
 
 Ce depot couvre:
 
